@@ -2,15 +2,15 @@
 import { WebSocketServer } from 'ws';
 import { PORT } from './config/ServerConfig.js';
 import { initTimers } from './core/ServerTimer.js';
-import { players, playerConnections } from './core/ServerGameState.js'; // playerConnections needed for initTimers
+// playerConnections is imported in ServerTimer.js directly now, no need to pass it here
 import { ServerGameManager } from './core/ServerGameManager.js';
 
 const wss = new WebSocketServer({ port: PORT });
 
 console.log(`WebSocket server started on port ${PORT}`);
 
-// Initialize Timer module (needs wss and playerConnections for broadcasting)
-initTimers(wss, playerConnections); 
+// Initialize Timer module (needs wss for broadcasting)
+initTimers(wss); // Removed playerConnections parameter as it's imported in ServerTimer.js directly
 
 // Instantiate and start the ServerGameManager
 const serverGameManager = new ServerGameManager(wss);

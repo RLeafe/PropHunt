@@ -16,8 +16,8 @@ export const SERVER_TICK_RATE_MS = 1000 / 60; // 60 ticks per second for physics
 
 // --- Physics Constants (Server Authoritative) ---
 export const WORLD_BOUNDARY = 49; // Max absolute X/Z coordinate for players/props
-export const SERVER_GRAVITY = -9.0 * 0.005; // Negative for downward acceleration, tuned
-export const SERVER_JUMP_FORCE = 0.3; // Initial upward velocity on jump, tuned
+export const SERVER_GRAVITY = -9.8 * 0.015; // Negative for downward acceleration, tuned
+export const SERVER_JUMP_FORCE = 0.05; // Initial upward velocity on jump, tuned
 export const SERVER_PLAYER_SPEED = 0.2; // Base movement speed per tick factor, tuned
 export const SERVER_MOUSE_SENSITIVITY = 0.0015; // How much mouse movement translates to rotation, tuned
 

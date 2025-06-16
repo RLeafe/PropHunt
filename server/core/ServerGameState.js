@@ -1,8 +1,8 @@
 // PropHunt/server/core/ServerGameState.js
 
-import { PLAYER_HEIGHT_OFFSET } from '../config/ServerConfig.js'; 
-import { GameStates } from '../utils/GameEnums.js'; 
-import { PropTypes, getPropTypeDefinition } from '../config/SharedPropsConfig.js'; 
+import { PLAYER_HEIGHT_OFFSET } from '../config/ServerConfig.js';
+import { GameStates, PlayerRoles } from '../utils/GameEnums.js'; // Import PlayerRoles
+import { PropTypes, getPropTypeDefinition } from '../config/SharedPropsConfig.js';
 import { ServerPlayer } from './ServerPlayer.js'; // Import ServerPlayer class
 
 // Authoritative source for all player data
@@ -10,13 +10,13 @@ export const players = new Map(); // Map<clientId, ServerPlayer instance>
 export const playerConnections = new Map(); // Map<WebSocket, clientId> for reverse lookup
 
 // Authoritative source for props: Map<propTypeId, boolean (available/taken)>
-export const serverPropsAvailability = new Map(); 
+export const serverPropsAvailability = new Map();
 
 // Game Rule Variables
-export let currentGameState = GameStates.LOBBY; 
-export let seekerId = null; 
-export let hiderCount = 0; 
-export let lastAssignedRoleWasSeeker = false;
+export let currentGameState = GameStates.LOBBY;
+export let seekerId = null;
+export let hiderCount = 0;
+export let lastAssignedRoleWasSeeker = false; // To alternate seeker role
 
 // --- Helper functions to manage state ---
 /**
@@ -26,8 +26,9 @@ export let lastAssignedRoleWasSeeker = false;
  */
 export function addPlayer(clientId, ws) {
     // Initial position for ServerPlayer should match client's spawn logic
-    const newPlayer = new ServerPlayer(clientId, { x: 0, y: PLAYER_HEIGHT_OFFSET, z: 0 }); 
-    players.set(clientId, newPlayer); 
+    // When adding a player, they initially have no role and are at a default spawn.
+    const newPlayer = new ServerPlayer(clientId, { x: 0, y: PLAYER_HEIGHT_OFFSET, z: 0 });
+    players.set(clientId, newPlayer);
     playerConnections.set(ws, clientId);
     console.log(`[ServerGameState] Player ${clientId} added.`);
 }
@@ -41,8 +42,19 @@ export function removePlayer(ws) {
     const clientId = playerConnections.get(ws);
     if (clientId) {
         const player = players.get(clientId);
-        if (player && player.morphedInto) {
-            markPropAvailable(player.morphedInto); 
+        if (player) {
+            // If the disconnected player was a hider and morphed, make their prop available again
+            if (player.role === PlayerRoles.HIDER && player.morphedInto) {
+                markPropAvailable(player.morphedInto);
+            }
+            // If the disconnected player was the seeker, clear the seekerId
+            if (clientId === seekerId) {
+                seekerId = null;
+            }
+            // If the disconnected player was a hider, decrement hider count
+            if (player.role === PlayerRoles.HIDER) {
+                hiderCount--;
+            }
         }
         players.delete(clientId);
         playerConnections.delete(ws);
@@ -76,20 +88,20 @@ export function getAllPlayersState() {
     }));
 }
 
-export function getCurrentGameState() { 
+export function getCurrentGameState() {
     return currentGameState;
 }
 
-export function setCurrentGameState(newState) { 
+export function setCurrentGameState(newState) {
     currentGameState = newState;
     console.log(`[ServerGameState] Game state changed to: ${currentGameState}`);
 }
 
-export function getHiderCount() { 
+export function getHiderCount() {
     return hiderCount;
 }
 
-export function setHiderCount(count) { 
+export function setHiderCount(count) {
     hiderCount = count;
 }
 
@@ -99,22 +111,26 @@ export function incrementHiderCount() {
 
 export function decrementHiderCount() {
     hiderCount--;
+    // Ensure hiderCount doesn't go below zero
+    if (hiderCount < 0) {
+        hiderCount = 0;
+    }
 }
 
-export function getSeekerId() { 
+export function getSeekerId() {
     return seekerId;
 }
 
-export function setSeekerId(id) { 
+export function setSeekerId(id) {
     seekerId = id;
 }
 
-export function getPlayerHealth(playerId) { 
+export function getPlayerHealth(playerId) {
     const player = players.get(playerId);
     return player ? player.health : undefined;
 }
 
-export function setPlayerHealth(playerId, health) { 
+export function setPlayerHealth(playerId, health) {
     const player = players.get(playerId);
     if (player) {
         player.health = health;
@@ -127,41 +143,41 @@ export function setLastAssignedRoleWasSeeker(value) {
 }
 
 export function resetGameState() {
-    setCurrentGameState(GameStates.LOBBY); 
-    setSeekerId(null); 
-    setHiderCount(0); 
-    players.forEach(player => { 
+    setCurrentGameState(GameStates.LOBBY);
+    setSeekerId(null);
+    setHiderCount(0);
+    players.forEach(player => {
         player.role = null;
         player.morphedInto = null;
-        player.health = 100; 
-        player.position = { x: 0, y: PLAYER_HEIGHT_OFFSET, z: 0 }; 
-        player.rotation = { x: 0, y: 0 }; 
-        player.velocityY = 0; 
+        player.health = 100;
+        player.position = { x: 0, y: PLAYER_HEIGHT_OFFSET, z: 0 };
+        player.rotation = { x: 0, y: 0 };
+        player.velocityY = 0;
         player.isOnGround = false;
         player.input = { // Ensure input is reset for new games
             keyboard: new Map(),
             mouseDelta: { x: 0, y: 0 },
         };
     });
-    initializeServerPropsAvailability(); 
+    initializeServerPropsAvailability();
     console.log('[ServerGameState] Game state reset.');
 }
 
 export function initializeServerPropsAvailability() {
     serverPropsAvailability.clear();
     for (const key in PropTypes) {
-        serverPropsAvailability.set(PropTypes[key].id, true); 
+        serverPropsAvailability.set(PropTypes[key].id, true);
     }
     console.log('[ServerGameState] Server props availability initialized/reset.');
 }
 
 export function isPropAvailable(propTypeId) {
-    return serverPropsAvailability.get(propTypeId) === true; 
+    return serverPropsAvailability.get(propTypeId) === true;
 }
 
 export function markPropTaken(propTypeId) {
     if (serverPropsAvailability.has(propTypeId)) {
-        serverPropsAvailability.set(propTypeId, false); 
+        serverPropsAvailability.set(propTypeId, false);
         console.log(`[GameState] Prop type ${propTypeId} marked as TAKEN.`);
         return true;
     }
@@ -170,7 +186,7 @@ export function markPropTaken(propTypeId) {
 
 export function markPropAvailable(propTypeId) {
     if (serverPropsAvailability.has(propTypeId)) {
-        serverPropsAvailability.set(propTypeId, true); 
+        serverPropsAvailability.set(propTypeId, true);
         console.log(`[GameState] Prop type ${propTypeId} marked as AVAILABLE.`);
         return true;
     }

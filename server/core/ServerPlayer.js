@@ -50,7 +50,7 @@ export class ServerPlayer {
             this.isOnGround = false; // Player is now airborne
             this.input.keyboard.set('Space', false); // Consume the jump input so it doesn't re-trigger
         }
-        
+
         // --- Horizontal Movement ---
         const moveDistance = SERVER_PLAYER_SPEED * deltaFactor; // Consistent distance per tick, scaled by deltaFactor
 
@@ -89,7 +89,7 @@ export class ServerPlayer {
 
         // --- Input Consumption for this Tick ---
         // Reset mouseDelta after it has been used for rotation in this tick
-        this.input.mouseDelta = {x:0, y:0}; 
+        this.input.mouseDelta = {x:0, y:0};
         // Keyboard state (Map) is overwritten by ServerGameManager based on client input,
         // so individual key 'false' states are propagated there.
         // Only 'Space' is explicitly consumed here to prevent rapid re-jumps.

@@ -12,8 +12,8 @@ export const WORLD_BOUNDARY = 49;
 export const PLAYER_HEIGHT_OFFSET = 0.9; 
 
 // --- Physics Constants (Client-side prediction, MUST match ServerConfig.js) ---
-export const GRAVITY = -9.0 * 0.005; 
-export const JUMP_FORCE = 0.3; 
+export const GRAVITY = -9.8 * 0.015; 
+export const JUMP_FORCE = 0.05; 
 export const PLAYER_SPEED = 0.2; 
 export const MOUSE_SENSITIVITY = 0.0015; 
 

@@ -1,17 +1,13 @@
 // PropHunt/client/js/components/ui/UIManager.js
 
-// No Three.js imports needed here anymore for message box
-// import { CSS3DRenderer, CSS3DObject } from 'https://unpkg.com/three@0.165.0/examples/jsm/renderers/CSS3DRenderer.js';
-// import * as THREE from 'https://unpkg.com/three@0.165.0/build/three.module.js';
-
 export class UIManager {
-    constructor() { // No gameContainerElement needed
+    constructor() {
         this.messageBox = document.getElementById('message-box');
         this.messageText = document.getElementById('message-text');
         
         this.currentTimeout = null;
 
-        this.hitFlash = document.createElement('div'); 
+        this.hitFlash = document.createElement('div');
         this.hitFlash.id = 'hit-flash';
         document.body.appendChild(this.hitFlash);
     }
@@ -24,19 +20,22 @@ export class UIManager {
     displayMessage(message, duration = 0) {
         if (!this.messageBox || !this.messageText) return;
 
-        this.messageText.textContent = message;
-        this.messageBox.classList.remove('hidden');
-        this.messageBox.classList.add('visible'); 
-
+        // Always clear any existing timeout when a new message is displayed
         if (this.currentTimeout) {
             clearTimeout(this.currentTimeout);
+            this.currentTimeout = null; // Reset to null after clearing
         }
+
+        this.messageText.textContent = message;
+        this.messageBox.classList.remove('hidden');
+        this.messageBox.classList.add('visible');
 
         if (duration > 0) {
             this.currentTimeout = setTimeout(() => {
                 this.hideMessage();
             }, duration);
         }
+        // If duration is 0, the message will remain indefinitely until hideMessage() is explicitly called.
     }
 
     /**
@@ -58,9 +57,9 @@ export class UIManager {
     flashHitIndicator() {
         if (!this.hitFlash) return;
         
-        this.hitFlash.classList.add('flash'); 
+        this.hitFlash.classList.add('flash');
         setTimeout(() => {
             this.hitFlash.classList.remove('flash');
-        }, 100); 
+        }, 100);
     }
 }

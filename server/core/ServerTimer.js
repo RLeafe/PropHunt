@@ -1,20 +1,17 @@
 // PropHunt/server/core/ServerTimer.js
 
-import { playerConnections } from './ServerGameState.js'; 
+import { playerConnections } from './ServerGameState.js'; // Still need this to access the map
 
-let wssInstance = null; 
-
+let wssInstance = null;
 const activeTimers = new Map();
 
-export function initTimers(wss, connections) { // Accept playerConnections here
+export function initTimers(wss) { // Removed playerConnections parameter as it's imported
     wssInstance = wss;
-    // Store the passed connections map. No longer directly importing it to avoid issues.
-    // playerConnections is now passed here directly from server.js.
 }
 
 export function startCountdownTimer(timerName, durationSeconds, onCompleteCallback, targetClientIds = null, messagePrefix = 'Time remaining: ', sendZeroMessage = true) {
-    if (!wssInstance || !playerConnections) { // Use the playerConnections that was passed in initTimers
-        console.error('[ServerTimer] Timers not initialized or playerConnections not available.');
+    if (!wssInstance) {
+        console.error('[ServerTimer] WSS instance not set for timers.');
         return;
     }
 
@@ -29,10 +26,11 @@ export function startCountdownTimer(timerName, durationSeconds, onCompleteCallba
 
         if (timeLeft >= 0) {
             const message = `${messagePrefix}${timeLeft}s`;
-            const messageType = 'countdownUpdate'; 
+            const messageType = 'countdownUpdate';
 
             if (targetClientIds && targetClientIds.length > 0) {
                 targetClientIds.forEach(clientId => {
+                    // Use the imported playerConnections map
                     const ws = Array.from(playerConnections.keys()).find(conn => playerConnections.get(conn) === clientId);
                     if (ws && ws.readyState === ws.OPEN) {
                         ws.send(JSON.stringify({ type: messageType, message: message, timeLeft: timeLeft, timerName: timerName }));
@@ -66,7 +64,7 @@ export function startCountdownTimer(timerName, durationSeconds, onCompleteCallba
                     });
                 }
             }
-            
+
             clearInterval(intervalId);
             activeTimers.delete(timerName);
             onCompleteCallback();
