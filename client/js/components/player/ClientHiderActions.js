@@ -1,83 +1,64 @@
-// PropHunt/client/js/components/player/ClientHiderActions.js
-import * as THREE from 'https://unpkg.com/three@0.165.0/build/three.module.js';
-import { MORPH_RANGE } from '../../utils/ClientGameConfig.js'; // Import MORPH_RANGE
+// /client/js/components/player/ClientHiderActions.js
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
+import { MORPH_RANGE } from '../../utils/ClientGameConfig.js';
 
 export class ClientHiderActions {
-    constructor() {
-        this.scene = null;
-        this.playerCamera = null;
-        this.playerGroup = null;
-        this.playerBody = null;
-        this.originalPlayerBodyGeometry = null;
-        this.originalPlayerBodyMaterial = null;
-        this.originalCameraRelativeY = 0;
-
-        this.morphableProps = null;
-        this.raycaster = new THREE.Raycaster();
-        this.screenCenter = new THREE.Vector2(0, 0); // Center of the screen for raycasting
-        this.networkClient = null;
-        this.playerEntity = null;
-    }
-
-    init(scene, playerCamera, playerGroup, playerBody, originalPlayerBodyGeometry, originalPlayerBodyMaterial, originalCameraRelativeY, morphableProps, networkClient, playerEntity) {
-        this.scene = scene;
-        this.playerCamera = playerCamera;
-        this.playerGroup = playerGroup;
-        this.playerBody = playerBody;
-        this.originalPlayerBodyGeometry = originalPlayerBodyGeometry;
-        this.originalPlayerBodyMaterial = originalPlayerBodyMaterial;
-        this.originalCameraRelativeY = originalCameraRelativeY;
-        this.morphableProps = morphableProps;
-        this.networkClient = networkClient;
+    constructor(camera, playerEntity, networkClient) {
+        this.camera = camera;
         this.playerEntity = playerEntity;
+        this.networkClient = networkClient;
+        this.raycaster = new THREE.Raycaster();
+        this.screenCenter = new THREE.Vector2(0, 0);
     }
 
+    /**
+     * Attempts to either morph into a prop or revert to human form.
+     */
     attemptMorph() {
-        const targetObject = this._getObjectPlayerIsLookingAt();
-
-        if (targetObject && targetObject.userData && targetObject.userData.propTypeId) {
-            const propTypeId = targetObject.userData.propTypeId;
-
-            // Optional client-side range check for immediate feedback (prediction)
-            // The server will perform the definitive check.
-            const playerPos = this.playerGroup.position; // Get current player position
-            const propPos = targetObject.position; // Get target prop's position
-            const distance = playerPos.distanceTo(propPos);
-
-            if (distance <= MORPH_RANGE) { // Use MORPH_RANGE from config
-                // Send hider morph action to server
-                this.networkClient.sendHiderMorph(propTypeId);
-                console.log(`Hider morph request sent to server for propType: ${propTypeId}.`);
-
-                // Client-side visual prediction: apply morph visuals immediately
-                // The server's playerUpdateBatch will correct/confirm this.
-                this.playerEntity.applyMorphVisuals(propTypeId);
-                return propTypeId;
-            } else {
-                console.log(`[ClientHiderActions] Prop too far to morph. Distance: ${distance.toFixed(2)}m (Max: ${MORPH_RANGE}m)`);
-                // If out of range, do not send to server, and reset client morph state
-                this.playerEntity.resetMorphVisuals();
-                return null;
-            }
+        // If the player is already morphed, the action is to unmorph.
+        if (this.playerEntity.morphedIntoPropTypeId) {
+            // Send a null target to the server to signal an unmorph request.
+            this.networkClient.sendHiderMorph(null);
         } else {
-            console.log('No valid morph target found, resetting morph.');
-            // If no valid target, reset morph visuals
-            this.playerEntity.resetMorphVisuals();
-            return null;
+            // If not morphed, find a valid prop to morph into.
+            const target = this._findMorphTarget();
+            if (target) {
+                // Send the ID of the found prop to the server.
+                this.networkClient.sendHiderMorph(target.propTypeId);
+            }
         }
     }
 
-    resetMorph() {
-        this.playerEntity.resetMorphVisuals();
-    }
+    /**
+     * Uses a raycaster from the center of the camera to find a morphable prop.
+     * @returns {object|null} The found prop's data or null if no valid target is found.
+     * @private
+     */
+    _findMorphTarget() {
+        this.raycaster.setFromCamera(this.screenCenter, this.camera);
+        
+        // Find all potential morph targets currently in the scene.
+        const morphableMeshes = [];
+        this.playerEntity.scene.traverse((object) => {
+            if (object.isMesh && object.userData.propTypeId) {
+                morphableMeshes.push(object);
+            }
+        });
 
-    _getObjectPlayerIsLookingAt() {
-        this.raycaster.setFromCamera(this.screenCenter, this.playerCamera);
-        const intersects = this.raycaster.intersectObjects(this.morphableProps, false);
+        const intersects = this.raycaster.intersectObjects(morphableMeshes);
 
         if (intersects.length > 0) {
-            return intersects[0].object;
+            const intersection = intersects[0];
+            const distance = intersection.distance;
+            const propTypeId = intersection.object.userData.propTypeId;
+
+            // Check if the found prop is within the allowed morph range.
+            if (distance <= MORPH_RANGE) {
+                return { propTypeId, distance };
+            }
         }
+        
+        // No valid target was found in range.
         return null;
     }
 }

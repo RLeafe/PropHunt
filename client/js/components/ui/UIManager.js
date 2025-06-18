@@ -1,65 +1,43 @@
-// PropHunt/client/js/components/ui/UIManager.js
+// /client/js/components/ui/UIManager.js
 
 export class UIManager {
     constructor() {
         this.messageBox = document.getElementById('message-box');
         this.messageText = document.getElementById('message-text');
+        this.countdownTimer = document.getElementById('countdown-timer');
+        this.playerHealth = document.getElementById('player-health');
         
-        this.currentTimeout = null;
-
-        this.hitFlash = document.createElement('div');
-        this.hitFlash.id = 'hit-flash';
-        document.body.appendChild(this.hitFlash);
+        this.messageTimeout = null;
     }
 
-    /**
-     * Displays a message in the message box.
-     * @param {string} message The text to display.
-     * @param {number} [duration=0] How long to display the message in milliseconds. 0 for indefinite.
-     */
-    displayMessage(message, duration = 0) {
-        if (!this.messageBox || !this.messageText) return;
-
-        // Always clear any existing timeout when a new message is displayed
-        if (this.currentTimeout) {
-            clearTimeout(this.currentTimeout);
-            this.currentTimeout = null; // Reset to null after clearing
+    displayMessage(text, duration = 3000) {
+        if (this.messageTimeout) {
+            clearTimeout(this.messageTimeout);
         }
 
-        this.messageText.textContent = message;
+        this.messageText.textContent = text;
         this.messageBox.classList.remove('hidden');
         this.messageBox.classList.add('visible');
 
         if (duration > 0) {
-            this.currentTimeout = setTimeout(() => {
-                this.hideMessage();
+            this.messageTimeout = setTimeout(() => {
+                this.messageBox.classList.remove('visible');
+                this.messageBox.classList.add('hidden');
             }, duration);
         }
-        // If duration is 0, the message will remain indefinitely until hideMessage() is explicitly called.
     }
 
-    /**
-     * Hides the message box.
-     */
-    hideMessage() {
-        if (!this.messageBox) return;
-        this.messageBox.classList.remove('visible');
-        this.messageBox.classList.add('hidden');
-        if (this.currentTimeout) {
-            clearTimeout(this.currentTimeout);
-            this.currentTimeout = null;
+    updateCountdown(text) {
+        if (text) {
+            this.countdownTimer.textContent = text;
+            this.countdownTimer.classList.remove('hidden');
+        } else {
+            this.countdownTimer.classList.add('hidden');
         }
     }
 
-    /**
-     * Flashes the screen red for a hit indication.
-     */
-    flashHitIndicator() {
-        if (!this.hitFlash) return;
-        
-        this.hitFlash.classList.add('flash');
-        setTimeout(() => {
-            this.hitFlash.classList.remove('flash');
-        }, 100);
+    updateHealth(health) {
+        this.playerHealth.textContent = `Health: ${health}`;
+        this.playerHealth.classList.remove('hidden');
     }
 }

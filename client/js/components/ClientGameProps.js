@@ -1,33 +1,37 @@
-// PropHunt/client/js/components/ClientGameProps.js
-// This file defines the types of props that can be morphed into.
-// It is used by the CLIENT.
+// /client/js/components/ClientGameProps.js
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
 
-import * as THREE from 'https://unpkg.com/three@0.165.0/build/three.module.js';
-// Corrected path to SharedPropsConfig.js assuming it's located at client/js/utils/
-import { PropTypes, getPropTypeDefinition } from '../utils/SharedPropsConfig.js'; // <-- CORRECTED PATH
+/**
+ * Creates a Three.js mesh based on a prop definition from the shared config.
+ * @param {object} propDefinition - The prop definition object from SharedPropsConfig.js.
+ * @returns {THREE.Mesh|null} A new Three.js mesh or null if the geometry type is unknown.
+ */
+export function createPropMesh(propDefinition) {
+    if (!propDefinition) return null;
 
-// Re-export shared definitions for convenience
-export { PropTypes, getPropTypeDefinition };
-
-// Function to create a Three.js Mesh from a prop definition
-export function createPropMesh(propDefinition) { 
     let geometry;
-    switch (propDefinition.geometry.type) {
+    const geoDef = propDefinition.geometry;
+
+    switch (geoDef.type) {
         case 'BoxGeometry':
-            geometry = new THREE.BoxGeometry(propDefinition.geometry.width, propDefinition.geometry.height, propDefinition.geometry.depth);
+            geometry = new THREE.BoxGeometry(geoDef.width, geoDef.height, geoDef.depth);
             break;
         case 'CylinderGeometry':
-            geometry = new THREE.CylinderGeometry(propDefinition.geometry.radiusTop, propDefinition.geometry.radiusBottom, propDefinition.geometry.height, propDefinition.geometry.radialSegments);
+            geometry = new THREE.CylinderGeometry(geoDef.radiusTop, geoDef.radiusBottom, geoDef.height, geoDef.radialSegments);
             break;
         case 'SphereGeometry':
-            geometry = new THREE.SphereGeometry(propDefinition.geometry.radius, propDefinition.geometry.widthSegments, propDefinition.geometry.heightSegments);
+            geometry = new THREE.SphereGeometry(geoDef.radius, geoDef.widthSegments, geoDef.heightSegments);
             break;
         default:
-            console.error(`Unknown geometry type: ${propDefinition.geometry.type}`);
+            console.error(`Unknown geometry type: ${geoDef.type}`);
             return null;
     }
-    const material = new THREE.MeshLambertMaterial({ color: propDefinition.material.color, side: THREE.DoubleSide });
+
+    const material = new THREE.MeshLambertMaterial({ color: propDefinition.material.color });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(propDefinition.defaultOffset.x, propDefinition.defaultOffset.y, propDefinition.defaultOffset.z);
+    
+    // Attach the prop's unique ID to the mesh's user data for easy identification
+    mesh.userData.propTypeId = propDefinition.id;
+
     return mesh;
 }
