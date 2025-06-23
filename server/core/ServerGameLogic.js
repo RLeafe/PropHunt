@@ -13,36 +13,35 @@ export function initializeGameLogic(context) {
 export function startGame() {
     if (State.players.size < Config.MIN_PLAYERS) return;
 
+    const { broadcaster, timerManager } = gameLogicContext;
+
+    broadcaster.toAll({ type: 'hidePersistentMessage' });
+    
     State.setCurrentGameState(GameStates.STARTING);
     const seekerId = State.assignRolesAndReturnSeekerId();
     
-    broadcast('all', { type: 'rolesAssigned', players: State.getAllPlayersState() });
+    broadcaster.toAll({ type: 'rolesAssigned', players: State.getAllPlayersState() });
     
     const seeker = State.getPlayer(seekerId);
     if(seeker) {
         seeker.isFrozen = true;
-        const seekerWs = findSocketById(seekerId);
-        if (seekerWs) {
-            seekerWs.send(JSON.stringify({ type: 'playerFreezeStateUpdate', isFrozen: true, message: 'You are the Seeker!' }));
-        }
+        broadcaster.toClient(seekerId, { type: 'playerFreezeStateUpdate', isFrozen: true, message: 'You are the Seeker!' });
     }
     
-    broadcast('hiders', { type: 'gamePauseState', paused: false, message: 'A seeker has been chosen! Hide!' });
+    broadcaster.toHiders(State.players, { type: 'gamePauseState', paused: false, message: 'A seeker has been chosen! Hide!' });
 
-    gameLogicContext.timerManager.start({
+    timerManager.start({
         name: 'seekerPause',
         durationSeconds: Config.SEEKER_PAUSE_DURATION_SECONDS,
-        onTick: (payload) => broadcast('seeker', payload),
+        onTick: (payload) => broadcaster.toSeekers(State.players, payload),
         onComplete: () => {
             State.setCurrentGameState(GameStates.PLAYING);
             if(seeker) {
                 seeker.isFrozen = false;
-                const seekerWs = findSocketById(seekerId);
-                if (seekerWs) {
-                    seekerWs.send(JSON.stringify({ type: 'playerFreezeStateUpdate', isFrozen: false, message: 'Go! The hunt is on!' }));
-                }
+                broadcaster.toClient(seekerId, { type: 'playerFreezeStateUpdate', isFrozen: false, message: 'Go! The hunt is on!' });
             }
-            broadcast('hiders', { type: 'gameStarted', message: 'The seeker has been released!' });
+            broadcaster.toHiders(State.players, { type: 'gameStarted', message: 'The seeker has been released!' });
+            broadcaster.toSeekers(State.players, { type: 'gameStarted', message: '' });
         },
         messagePrefix: 'Hunt in: '
     });
@@ -50,25 +49,31 @@ export function startGame() {
 
 export function endGame(reason) {
     if (State.getCurrentGameState() === GameStates.ENDED) return;
-    State.setCurrentGameState(GameStates.ENDED);
-    gameLogicContext.timerManager.stopAll();
+    const { broadcaster, timerManager } = gameLogicContext;
     
-    broadcast('all', { type: 'gameEnded', reason });
+    State.setCurrentGameState(GameStates.ENDED);
+    timerManager.stopAll();
+    
+    broadcaster.toAll({ type: 'gameEnded', reason });
 
-    gameLogicContext.timerManager.start({
+    timerManager.start({
         name: 'gameReset',
         durationSeconds: Config.GAME_END_RESET_SECONDS,
-        onTick: (payload) => broadcast('all', payload),
+        onTick: (payload) => broadcaster.toAll(payload),
         onComplete: () => {
             State.resetGameState();
-            broadcast('all', {
+            broadcaster.toAll({ type: 'gameStarted', message: '' });
+            broadcaster.toAll({
                 type: 'gameStateUpdate',
                 gameState: GameStates.LOBBY,
                 players: State.getAllPlayersState()
             });
              if (State.players.size >= Config.MIN_PLAYERS) {
                 startGame();
-            }
+            } else {
+                 const waitingMessage = `Waiting for more players... (${State.players.size}/${Config.MIN_PLAYERS})`;
+                 broadcaster.toAll({ type: 'showPersistentMessage', message: waitingMessage });
+             }
         },
         messagePrefix: 'New game in: '
     });
@@ -83,14 +88,14 @@ export function processSeekerHit(seekerId) {
         const distance = getDistance(seeker.position, hider.position);
         if (distance < Config.SEEKER_SWING_DISTANCE) {
             hider.health -= Config.HIT_DAMAGE;
-            broadcast('all', { type: 'playerHit', playerId: hider.playerId, newHealth: hider.health, attackerId: seekerId });
+            gameLogicContext.broadcaster.toAll({ type: 'playerHit', playerId: hider.playerId, newHealth: hider.health, attackerId: seekerId });
             if (hider.health <= 0) {
                 if(hider.morphedInto) State.markPropAvailable(hider.morphedInto);
                 hider.morphedInto = null;
                 hider.role = PlayerRoles.SEEKER;
                 hider.health = 100;
                 State.decrementHiderCount();
-                broadcast('all', { type: 'playerCaught', caughtHiderId: hider.playerId });
+                gameLogicContext.broadcaster.toAll({ type: 'playerCaught', caughtHiderId: hider.playerId });
                 if (State.getHiderCount() <= 0) {
                     endGame('All hiders have been caught!');
                 }
@@ -106,45 +111,27 @@ export function processHiderMorph(hiderId, targetPropId) {
 
     if (!targetPropId) {
         if (player.morphedInto) {
+
+            // Make the old prop available again.
             State.markPropAvailable(player.morphedInto);
             player.morphedInto = null;
+            
+            // Notify all clients that the player has un-morphed.
             broadcast('all', { type: 'playerMorphed', playerId: hiderId, targetPropId: null });
         }
         return;
     }
     
+    // Logic for morphing INTO a new prop.
     const propDef = getPropTypeDefinition(targetPropId);
     if (!propDef || player.role !== PlayerRoles.HIDER || !State.isPropAvailable(targetPropId)) return;
+
+    // If currently morphed into something else, free up the old prop first.
     if (player.morphedInto) State.markPropAvailable(player.morphedInto);
     
     State.markPropTaken(targetPropId);
     player.morphedInto = targetPropId;
-    broadcast('all', { type: 'playerMorphed', playerId: hiderId, targetPropId: targetPropId });
-}
-
-function broadcast(target, payload) {
-    const { wss } = gameLogicContext;
-    const message = JSON.stringify(payload);
-
-    if (target === 'all') {
-        wss.clients.forEach(client => { if (client.readyState === 1) client.send(message); });
-    } else if (target === 'seeker') {
-        const seekerWs = findSocketById(State.getSeekerId());
-        if (seekerWs?.readyState === 1) seekerWs.send(message);
-    } else if (target === 'hiders') {
-         State.players.forEach(player => {
-            if(player.role === PlayerRoles.HIDER) {
-                const ws = findSocketById(player.playerId);
-                if (ws?.readyState === 1) ws.send(message);
-            }
-        });
-    }
-}
-
-export function findSocketById(id) {
-    const { playerConnections } = gameLogicContext;
-    if (!playerConnections) return null;
-    return Array.from(playerConnections.keys()).find(conn => playerConnections.get(conn) === id);
+    gameLogicContext.broadcaster.toAll({ type: 'playerMorphed', playerId: hiderId, targetPropId: targetPropId });
 }
 
 function getDistance(pos1, pos2) {

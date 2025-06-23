@@ -1,7 +1,6 @@
 // /client/js/components/ui/AlertMessage.js
 
 /**
- * A self-contained, reusable component for displaying game alerts and messages.
  * It creates and manages its own HTML elements.
  */
 export class AlertMessage {
@@ -55,7 +54,7 @@ export class AlertMessage {
 
     /**
      * Updates the dedicated countdown timer text.
-     * @param {string} text The text to display (e.g., "Hunt in: 10s").
+     * @param {string} text
      */
     updateCountdown(text) {
         if (text) {

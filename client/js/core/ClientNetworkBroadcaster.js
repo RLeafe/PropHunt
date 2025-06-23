@@ -1,5 +1,8 @@
-// /client/js/core/NetworkClient.js
-export class NetworkClient {
+// /client/js/core/ClientNetworkBroadcaster.js
+/**
+ * Sending WebSocket messages from the client to the server.
+ */
+export class ClientNetworkBroadcaster {
     constructor() {
         this.socket = null;
         this.isConnected = false;

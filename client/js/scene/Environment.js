@@ -1,10 +1,9 @@
 // /client/js/scene/Environment.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
-import { PropTypes } from '../../shared/props/SharedPropsConfig.js';
-import { createPropMesh } from '../components/ClientGameProps.js';
 
 /**
- * Populates the given scene with basic environment elements.
+ * Populates the given scene with basic, static environment elements
+ * that players can collide with but not interact with in other ways.
  * @param {THREE.Scene} scene The Three.js scene to populate.
  */
 export function createEnvironment(scene) {
@@ -25,13 +24,5 @@ export function createEnvironment(scene) {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // --- Static Props ---
-    Object.values(PropTypes).forEach((propDef, index) => {
-        const propMesh = createPropMesh(propDef);
-        if (propMesh) {
-            propMesh.position.set((index - 1) * 4, propDef.defaultOffset.y, -5);
-            propMesh.castShadow = true;
-            scene.add(propMesh);
-        }
-    });
+    // File is now only for non-morphable, static level geometry.
 }

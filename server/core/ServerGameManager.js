@@ -4,7 +4,11 @@ import * as GameLogic from './ServerGameLogic.js';
 import { TimerManager } from './TimerManager.js';
 import { MIN_PLAYERS, SERVER_TICK_RATE_MS } from '../config/ServerConfig.js';
 import { GameStates } from '../../client/shared/utils/GameEnums.js';
+import { ServerNetworkBroadcaster } from './ServerNetworkBroadcaster.js';
 
+/**
+ * Manages the core game loop, player state, and physics updates.
+ */
 export class ServerGameManager {
     constructor(wss) {
         this.wss = wss;
@@ -13,10 +17,11 @@ export class ServerGameManager {
         this.lastTickTime = Date.now();
         this.gameLoopIntervalId = null;
 
+        this.broadcaster = new ServerNetworkBroadcaster(this.wss, State.playerConnections);
+
         GameLogic.initializeGameLogic({
-            wss: this.wss,
+            broadcaster: this.broadcaster,
             timerManager: this.timerManager,
-            playerConnections: State.playerConnections,
         });
     }
 
@@ -39,12 +44,11 @@ export class ServerGameManager {
         State.players.forEach(player => {
             const input = this.playerInputs.get(player.playerId);
             if (input) {
-                // We still gather input even if frozen, we just don't apply it in ServerPlayer
                 player.input.keyboard = input.keyboard;
                 player.input.mouseDelta = { ...input.mouseDelta };
-                input.mouseDelta = { x: 0, y: 0 };
+                input.mouseDelta = { x: 0, y: 0 }; 
             } else {
-                player.input.keyboard.clear();
+                player.input.keyboard?.clear?.();
                 player.input.mouseDelta = { x: 0, y: 0 };
             }
             player.updatePhysics(deltaTime);
@@ -53,87 +57,61 @@ export class ServerGameManager {
 
     broadcastPlayerStates() {
         const payload = { type: 'playerUpdateBatch', players: State.getAllPlayersState() };
-        const message = JSON.stringify(payload);
-        this.wss.clients.forEach(client => {
-            if (client.readyState === 1) client.send(message);
-        });
+        this.broadcaster.toAll(payload);
     }
 
-    handleClientConnected(ws, clientId) {
+    /**
+     * Adds a new player to the game world and informs other clients.
+     * @param {WebSocket} ws The WebSocket connection for the new player.
+     * @param {string} clientId The unique ID for the new player.
+     */
+    addNewPlayer(ws, clientId) {
         State.addPlayer(clientId, ws);
         this.playerInputs.set(clientId, { keyboard: new Map(), mouseDelta: { x: 0, y: 0 } });
         console.log(`[Server] Client connected: ${clientId}. Total: ${State.players.size}`);
 
-        ws.send(JSON.stringify({ type: 'connected', clientId }));
-        ws.send(JSON.stringify({ type: 'initialState', players: State.getAllPlayersState(), gameState: State.getCurrentGameState() }));
+        this.broadcaster.toClient(clientId, { type: 'connected', clientId });
+        this.broadcaster.toClient(clientId, { type: 'initialState', players: State.getAllPlayersState(), gameState: State.getCurrentGameState() });
 
-        this.broadcastToAllButOne(ws, { type: 'playerConnected', player: State.getPlayer(clientId) });
+        const newPlayer = State.getPlayer(clientId);
+        const playerState = {
+            playerId: newPlayer.playerId,
+            position: newPlayer.position,
+            rotation: newPlayer.rotation,
+            role: newPlayer.role,
+            morphedInto: newPlayer.morphedInto,
+            health: newPlayer.health,
+            isFrozen: newPlayer.isFrozen,
+            timestamp: Date.now()
+        };
+        this.broadcaster.toAllButOne(ws, { type: 'playerConnected', player: playerState });
 
-        if (State.players.size >= MIN_PLAYERS && State.getCurrentGameState() === GameStates.LOBBY) {
-            GameLogic.startGame();
-        }
-    }
-
-    handleClientMessage(ws, rawMessage) {
-        try {
-            const data = JSON.parse(rawMessage);
-            const senderId = State.playerConnections.get(ws);
-            if (!senderId) return;
-            const player = State.getPlayer(senderId);
-
-            switch (data.type) {
-                case 'playerInput': {
-                    const input = this.playerInputs.get(senderId);
-                    if (input) {
-                        input.keyboard = new Map(Object.entries(data.keyboard || {}));
-                        input.mouseDelta.x += data.mouseDelta.x || 0;
-                        input.mouseDelta.y += data.mouseDelta.y || 0;
-                    }
-                    break;
-                }
-                case 'togglePauseRequest': {
-                    if (player) {
-                        player.isFrozen = !player.isFrozen;
-                        const clientSocket = GameLogic.findSocketById(senderId);
-                        if (clientSocket) {
-                            clientSocket.send(JSON.stringify({
-                                type: 'playerFreezeStateUpdate',
-                                isFrozen: player.isFrozen,
-                                message: player.isFrozen ? "Game Paused" : "Game Resumed"
-                            }));
-                        }
-                    }
-                    break;
-                }
-                case 'seekerSwing':
-                    if (State.getCurrentGameState() === GameStates.PLAYING) GameLogic.processSeekerHit(senderId);
-                    break;
-                case 'hiderMorph':
-                    if (State.getCurrentGameState() === GameStates.PLAYING) GameLogic.processHiderMorph(senderId, data.targetPropId);
-                    break;
+        if (State.getCurrentGameState() === GameStates.LOBBY) {
+            if (State.players.size < MIN_PLAYERS) {
+                const waitingMessage = `Waiting for more players... (${State.players.size}/${MIN_PLAYERS})`;
+                this.broadcaster.toAll({ type: 'showPersistentMessage', message: waitingMessage });
+            } else {
+                GameLogic.startGame();
             }
-        } catch (error) {
-            console.error("Failed to parse client message:", rawMessage, error);
         }
     }
 
-    handleClientDisconnected(ws) {
+    /**
+     * Removes a player from the game world and informs other clients.
+     * @param {WebSocket} ws The WebSocket connection of the player who disconnected.
+     */
+    removePlayer(ws) {
         const disconnectedId = State.removePlayer(ws);
         if (disconnectedId) {
             this.playerInputs.delete(disconnectedId);
-            this.broadcastToAllButOne(null, { type: 'playerDisconnected', playerId: disconnectedId });
-            if (State.getCurrentGameState() === GameStates.PLAYING && (State.players.size < MIN_PLAYERS || State.getHiderCount() <= 0)) {
-                GameLogic.endGame('A player left or all hiders were found.');
+            this.broadcaster.toAll({ type: 'playerDisconnected', playerId: disconnectedId });
+            
+            if (State.getCurrentGameState() !== GameStates.LOBBY && State.players.size < MIN_PLAYERS) {
+                 GameLogic.endGame('Not enough players remain.');
+            } else if (State.getCurrentGameState() === GameStates.LOBBY && State.players.size < MIN_PLAYERS) {
+                 const waitingMessage = `Waiting for more players... (${State.players.size}/${MIN_PLAYERS})`;
+                 this.broadcaster.toAll({ type: 'showPersistentMessage', message: waitingMessage });
             }
         }
-    }
-    
-    broadcastToAllButOne(exceptWs, payload) {
-        const message = JSON.stringify(payload);
-        this.wss.clients.forEach(client => {
-            if (client !== exceptWs && client.readyState === 1) {
-                client.send(message);
-            }
-        });
     }
 }

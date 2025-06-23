@@ -76,6 +76,56 @@ canvas {
     pointer-events: none;
 }
 
+/* *** ADDED: Styles for the new settings menu. *** */
+#settings-menu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    background-color: rgba(10, 20, 35, 0.9);
+    color: #cbd5e0;
+    padding: 20px 30px;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+    border: 1px solid #2d3748;
+    z-index: 2000; /* Ensure it's above other UI elements */
+}
+
+#settings-menu h2 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 25px;
+    color: #e2e8f0;
+    font-weight: 600;
+}
+
+.setting-group {
+    margin-bottom: 20px;
+}
+
+.setting-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+#sensitivity-slider {
+    width: 100%;
+    cursor: pointer;
+}
+
+#sensitivity-value {
+    display: block;
+    text-align: center;
+    margin-top: 8px;
+    font-family: 'Courier New', Courier, monospace;
+    background-color: #2d3748;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+
 .hidden {
     display: none !important;
 }

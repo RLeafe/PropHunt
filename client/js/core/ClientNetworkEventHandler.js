@@ -95,6 +95,15 @@ export class ClientNetworkEventHandler {
                 break;
             }
 
+            case 'showPersistentMessage':
+                // 0 makes the message stay until hidden.
+                this.alertMessage.show(message.message, 0);
+                break;
+            
+            case 'hidePersistentMessage':
+                this.alertMessage.hide();
+                break;
+
             default:
                 break;
         }

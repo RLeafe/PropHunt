@@ -2,9 +2,9 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js';
 
 export class ClientSeekerActions {
-    constructor(camera, networkClient) {
+    constructor(camera, broadcaster) {
         this.camera = camera;
-        this.networkClient = networkClient;
+        this.broadcaster = broadcaster;
         this.isSwinging = false;
         this.swingCooldown = 500; // Cooldown in milliseconds
 
@@ -35,27 +35,20 @@ export class ClientSeekerActions {
         if (this.isSwinging) return;
         this.isSwinging = true;
 
-        // Animate locally for immediate visual feedback
         const initialRot = this.batMesh.rotation.clone();
-        this.batMesh.rotation.z += Math.PI / 2; // Simple swing animation
+        this.batMesh.rotation.z += Math.PI / 2;
         
-        // Reset the bat position after the animation duration
         setTimeout(() => {
             this.batMesh.rotation.copy(initialRot);
         }, 200);
 
-        // Set a cooldown to prevent rapid-fire swinging
         setTimeout(() => {
             this.isSwinging = false;
         }, this.swingCooldown);
 
-        // Send the action to the server for authoritative hit detection
-        this.networkClient.sendSeekerSwing();
+        this.broadcaster.sendSeekerSwing();
     }
     
-    /**
-     * Cleans up the bat's geometry and material to prevent memory leaks.
-     */
     dispose() {
         if (this.batMesh) {
             this.camera.remove(this.batMesh);

@@ -4,7 +4,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.m
 /**
  * Creates a Three.js mesh based on a prop definition from the shared config.
  * @param {object} propDefinition - The prop definition object from SharedPropsConfig.js.
- * @returns {THREE.Mesh|null} A new Three.js mesh or null if the geometry type is unknown.
+ * @returns {THREE.Mesh|null}
  */
 export function createPropMesh(propDefinition) {
     if (!propDefinition) return null;
